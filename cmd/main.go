@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var powerMetrics = []string{"PkgWatt", "RAMWatt", "PkgTmp"}
+var powerMetrics = []string{"PkgWatt", "RAMWatt", "PkgTmp", "Bzy_MHz", "TSC_MHz"}
 
 func main() {
 	logrus.SetOutput(os.Stderr)
@@ -27,6 +27,7 @@ func main() {
 		threads:                    runtime.NumCPU(),
 		metrics:                    powerMetrics,
 		repeat:                     10,
+		iterations:                 1,
 		durationBetweenMeasures:    time.Duration(1 * time.Second),
 		method:                     "all",
 		cpuInfo:                    true,
@@ -79,6 +80,7 @@ The two can be separated to build a CSV result file while displaying the progres
 	cmd.PersistentFlags().IntVar(&input.threads, "threads", input.threads, "number of threads to use for the load, defaults to the number of threads on the system")
 	cmd.PersistentFlags().StringSliceVar(&input.metrics, "metrics", input.metrics, "turbostat columns to read")
 	cmd.PersistentFlags().IntVar(&input.repeat, "repeat", input.repeat, "measures are repeated with this value and the measure is the mean of all repetitions")
+	cmd.PersistentFlags().IntVar(&input.iterations, "iterations", input.repeat, "iterations")
 	cmd.PersistentFlags().DurationVar(&input.durationBetweenMeasures, "duration-between-measures", input.durationBetweenMeasures, "the duration to wait between two measures")
 	cmd.PersistentFlags().StringVar(&input.method, "method", input.method, "the method to use to generate the load. See stress-ng cpu-method flag")
 	cmd.PersistentFlags().BoolVar(&input.cpuInfo, "cpu-info", input.cpuInfo, "output CPU info before results")
@@ -98,6 +100,7 @@ type benchInput struct {
 	loadDurationBeforeMeasures time.Duration
 	metrics                    []string
 	repeat                     int
+	iterations                 int
 	durationBetweenMeasures    time.Duration
 	initialLoad                int
 	method                     string
@@ -138,7 +141,7 @@ func stress(input benchInput, name string, stressFn func(load int, threads int) 
 			case <-done:
 				return goneErr
 			default:
-				stats, err := turboStat(input.metrics, input.durationBetweenMeasures)
+				stats, err := turboStat(input.metrics, input.durationBetweenMeasures, input.iterations)
 				if err != nil {
 					return err
 				}
@@ -277,8 +280,8 @@ func stressNGMAximize(threads int) (*exec.Cmd, error) {
 	return stressNG("--cpu", fmt.Sprintf("%d", threads), "--vm", fmt.Sprintf("%d", threads), "--maximize")
 }
 
-func turboStat(stats []string, durationBetweenMeasures time.Duration) ([]float64, error) {
-	cmd := exec.Command("turbostat", "-q", "-c", "package", "--num_iterations", "1", "--interval", fmt.Sprintf("%02f", durationBetweenMeasures.Seconds()), "--show", strings.Join(stats, ","))
+func turboStat(stats []string, durationBetweenMeasures time.Duration, iterations int) ([]float64, error) {
+	cmd := exec.Command("turbostat", "-q", "-c", "package", "--num_iterations", fmt.Sprintf("%d", iterations), "--interval", fmt.Sprintf("%02f", durationBetweenMeasures.Seconds()), "--show", strings.Join(stats, ","))
 	logrus.Info(cmd.Args)
 	stdout := bytes.NewBuffer(nil)
 	cmd.Stdout = stdout
